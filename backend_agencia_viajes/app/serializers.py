@@ -1,4 +1,8 @@
+from statistics import mean
+
 from django.contrib.auth.models import Group, User
+from django.utils.timezone import now
+
 from .models import *
 
 
@@ -36,118 +40,108 @@ class CiudadSerializer(serializers.HyperlinkedModelSerializer):
         fields = ['id', 'url', 'nombre', 'departamento']
 
 
-class DestinoTuristicoSerializer(serializers.HyperlinkedModelSerializer):
-    ciudad = CiudadSerializer()
-
+class FechaPlanSerializer(serializers.ModelSerializer):
     class Meta:
-        model = DestinoTuristico
-        fields = ['id', 'nombre', 'estado', 'ciudad']
+        model = FechaPlan
+        fields = '__all__'
+
+    def get_plans_by_future_dates(self):
+        return FechaPlan.objects.filter(fecha_ida__gte=now()).distinct("plan").prefetch_related("plan")
+
+    def get_by_plan(self, plan_id):
+        return FechaPlan.objects.filter(plan=plan_id, fecha_ida__gte=now()).values()
 
 
 class PlanSerializer(serializers.HyperlinkedModelSerializer):
-    destinos = DestinoTuristicoSerializer(many=True, read_only=True)
+    fechas = FechaPlanSerializer(many=True, read_only=True)
+    precioMinimo = serializers.SerializerMethodField(method_name='get_min_price')
+    rating = serializers.SerializerMethodField()
+    totalRating = serializers.SerializerMethodField()
+    totalDias = serializers.SerializerMethodField(method_name='get_days')
 
     class Meta:
         model = Plan
-        fields = ['id', 'titulo', 'descripcion', 'imagen', 'fecha_ida', 'fecha_regreso', 'rating', 'precio', 'destinos']
+        fields = ['id', 'titulo', 'descripcion', 'imagen', 'fechas', 'precioMinimo', 'rating', 'totalDias',
+                  'totalRating']
+
+    def get_min_price(self, obj):
+        min_item = self.get_min_fecha_plan_by_price(obj)
+        if min_item:
+            return min_item.precio
+        return None
+
+    def get_min_fecha_plan_by_price(self, obj):
+        fechas = FechaPlan.objects.filter(plan=obj, fecha_ida__gte=now())
+        min_item = None
+
+        for item in fechas:
+            if min_item is None:
+                min_item = item
+                continue
+
+            if min_item.precio < item.precio:
+                min_item = min_item
+            else:
+                min_item = item
+
+        return min_item
+
+    def get_rating(self, obj):
+        reviews = Review.objects.filter(plan=obj)
+        if not reviews:
+            return None
+        return round(mean(map(lambda item: item.calificacion, reviews)), 2)
+
+    def get_totalRating(self, obj):
+        return Review.objects.filter(plan=obj).count()
+
+    def get_days(self, obj):
+        min_item = self.get_min_fecha_plan_by_price(obj)
+        if min_item:
+            d1 = min_item.fecha_ida
+            d2 = min_item.fecha_regreso
+            diff = abs((d2 - d1).days)
+            return diff
+        else:
+            return None
 
 
-class ServicioSerializer(serializers.HyperlinkedModelSerializer):
+class HabitacionSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
-        model = Servicio
-        fields = ['id', 'descripcion', 'estado']
-
-
-class TipoHabitacionSerializer(serializers.HyperlinkedModelSerializer):
-    class Meta:
-        model = TipoHabitacion
+        model = Habitacion
         fields = ['id', 'descripcion']
 
 
-class CategoriaSerializer(serializers.HyperlinkedModelSerializer):
+class HotelHabitacionSerializer(serializers.HyperlinkedModelSerializer):
+    habitacion = HabitacionSerializer(read_only=True)
+
     class Meta:
-        model = Categoria
-        fields = ['id', 'descripcion']
+        model = HotelHabitacion
+        fields = '__all__'
 
 
 class HotelSerializer(serializers.HyperlinkedModelSerializer):
-    servicios = ServicioSerializer(many=True, read_only=True)
-    tipo_habitaciones = TipoHabitacionSerializer(many=True, read_only=True)
+    hotel_habitaciones = HotelHabitacionSerializer(many=True, read_only=True)
     ciudad = CiudadSerializer
-    categoria = CategoriaSerializer(read_only=True)
 
     class Meta:
         model = Hotel
-        fields = ['id', 'url', 'nombre', 'descripcion', 'estado', 'imagen', 'servicios', 'tipo_habitaciones', 'ciudad',
-                  'categoria']
-
-
-class HotelServicioSerializer(serializers.HyperlinkedModelSerializer):
-    # hotel = HotelSerializer(read_only=True)
-    servicio = ServicioSerializer(read_only=True)
-
-    class Meta:
-        model = HotelServicio
-        fields = '__all__'
-
-
-class HotelTipoHabitacionSerializer(serializers.HyperlinkedModelSerializer):
-    # hotel = HotelSerializer(read_only=True)
-    tipo_habitacion = TipoHabitacionSerializer(read_only=True)
-
-    class Meta:
-        model = HotelTipoHabitacion
-        fields = '__all__'
-
-
-class DestinoHotelSerializer(serializers.HyperlinkedModelSerializer):
-    plan = PlanSerializer(read_only=True)
-    destino = DestinoTuristicoSerializer(read_only=True)
-    hotel = HotelSerializer(read_only=True)
-    hotel_tipo_habitacion = HotelTipoHabitacionSerializer(read_only=True)
-
-    class Meta:
-        model = DestinoHotel
-        fields = '__all__'
-
-
-class ComplementoSerializer(serializers.HyperlinkedModelSerializer):
-    class Meta:
-        model = Complemento
-        fields = ['id', 'descripcion', 'estado']
-
-
-class ComplementoDestinoSerializer(serializers.HyperlinkedModelSerializer):
-    complemento = ComplementoSerializer(read_only=True)
-    destino_turistico = DestinoTuristicoSerializer(read_only=True)
-
-    class Meta:
-        model = ComplementoDestino
-        fields = '__all__'
+        fields = ['id', 'nombre', 'descripcion', 'url', 'estado', 'imagen', 'hotel_habitaciones', 'ciudad']
 
 
 class ClienteSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = Cliente
-        # fields = '__all__'
         fields = ['id', 'nombres', 'apellidos', 'identificacion', 'email', 'fecha_nacimiento', 'telefono', 'uid']
 
 
-# class ClientePlanSerializer(serializers.HyperlinkedModelSerializer):
-#     class Meta:
-#         model = ClientePlan
-#         fields = '__all__'
-
-
-class PromocionSerializer(serializers.HyperlinkedModelSerializer):
-    plan = PlanSerializer(read_only=True)
-
+class FacturaSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Promocion
+        model = Factura
         fields = '__all__'
 
 
-class CompraSerializer(serializers.ModelSerializer):
+class ReviewSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Compras
+        model = Review
         fields = '__all__'
