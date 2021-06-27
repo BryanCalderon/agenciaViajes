@@ -31,9 +31,13 @@ class PlanViewSet(viewsets.ModelViewSet):
     serializer_class = PlanSerializer
 
     def list(self, request, *args, **kwargs):
-        fecha_plan_list = FechaPlanSerializer.get_plans_by_future_dates(self)
-        planes = [fp.plan for fp in fecha_plan_list]
-        serializer = PlanSerializer(planes, many=True, context={'request': request})
+        planes = PlanSerializer.get_plans_with_future_dates(self, None)
+        page = self.paginate_queryset(planes)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(planes, many=True)
         return Response(serializer.data)
 
     def retrieve(self, request, *args, **kwargs):

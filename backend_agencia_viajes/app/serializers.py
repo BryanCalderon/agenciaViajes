@@ -62,7 +62,7 @@ class PlanSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = Plan
         fields = ['id', 'titulo', 'descripcion', 'imagen', 'fechas', 'precioMinimo', 'rating', 'totalDias',
-                  'totalRating']
+                  'totalRating', 'fechas']
 
     def get_min_price(self, obj):
         min_item = self.get_min_fecha_plan_by_price(obj)
@@ -104,6 +104,11 @@ class PlanSerializer(serializers.HyperlinkedModelSerializer):
             return diff
         else:
             return None
+
+    def get_plans_with_future_dates(self, obj):
+        fecha_plan_list = FechaPlanSerializer.get_plans_by_future_dates(self)
+        planes = [fp.plan for fp in fecha_plan_list]
+        return planes
 
 
 class HabitacionSerializer(serializers.HyperlinkedModelSerializer):
