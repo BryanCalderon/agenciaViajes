@@ -42,7 +42,7 @@ class FechaPlan(models.Model):
     fecha_ida = models.DateTimeField(null=True)
     fecha_regreso = models.DateTimeField(null=True)
     precio = models.FloatField(null=True)
-    plan = models.ForeignKey('Plan', related_name='fechas', on_delete=models.DO_NOTHING)
+    plan = models.ForeignKey(Plan, related_name='fechas', on_delete=models.DO_NOTHING)
 
 
 class Habitacion(models.Model):
